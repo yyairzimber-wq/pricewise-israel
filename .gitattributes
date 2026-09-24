@@ -1,0 +1,4 @@
+# Keep shell/gradle scripts runnable on Linux runners
+*.sh text eol=lf
+gradlew text eol=lf
+*.yml text eol=lf

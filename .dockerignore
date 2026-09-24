@@ -1,0 +1,9 @@
+node_modules
+dist
+server/data
+server/.cache
+android
+ios
+.env
+.env.local
+deploy/.env
