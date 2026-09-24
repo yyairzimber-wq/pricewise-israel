@@ -27,7 +27,11 @@ function run(cmd: string, args: string[], cwd: string): { ok: boolean; out: stri
   return { ok: r.status === 0, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
 }
 
-export function publishVercel(db: DB, log: (m: string) => void, opts: { deploy?: boolean } = {}): { url?: string } {
+/**
+ * By default publishes the app only — prices come from the snapshot on GitHub
+ * Pages (see .env.vercel). `withData: true` bundles a local snapshot instead.
+ */
+export function publishVercel(db: DB, log: (m: string) => void, opts: { deploy?: boolean; withData?: boolean } = {}): { url?: string } {
   // 1. Build the web app for static hosting (reads .env.vercel).
   log("בונה את האפליקציה…");
   const build = run("npx", ["vite", "build", "--mode", "vercel", "--outDir", `"${BUILD}"`, "--emptyOutDir"], ROOT);
@@ -39,11 +43,13 @@ export function publishVercel(db: DB, log: (m: string) => void, opts: { deploy?:
   fs.cpSync(BUILD, STAGE, { recursive: true });
   fs.writeFileSync(path.join(STAGE, "vercel.json"), JSON.stringify(VERCEL_JSON, null, 2));
 
-  // 3. Price snapshot.
-  log("מייצא תמונת מצב של המחירים…");
-  const rep = exportStatic(db, STAGE, log);
-  log(`  ${rep.products.toLocaleString()} מוצרים · ${(rep.bytes / 1e6).toFixed(1)}MB · ${Math.round(rep.ms / 1000)} שניות`);
-  if (rep.bytes > 95e6) throw new Error(`snapshot is ${(rep.bytes / 1e6).toFixed(1)}MB — over Vercel Hobby's 100MB upload limit`);
+  // 3. Price snapshot (only when bundling data with the app).
+  if (opts.withData) {
+    log("מייצא תמונת מצב של המחירים…");
+    const rep = exportStatic(db, STAGE, log);
+    log(`  ${rep.products.toLocaleString()} מוצרים · ${(rep.bytes / 1e6).toFixed(1)}MB · ${Math.round(rep.ms / 1000)} שניות`);
+    if (rep.bytes > 95e6) throw new Error(`snapshot is ${(rep.bytes / 1e6).toFixed(1)}MB — over Vercel Hobby's 100MB upload limit`);
+  }
 
   if (opts.deploy === false) return {};
 

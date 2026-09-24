@@ -155,7 +155,7 @@ switch (cmd) {
     break;
   }
   case "publish-vercel": {
-    const r = publishVercel(db, log, { deploy: flag("dry-run") !== "true" });
+    const r = publishVercel(db, log, { deploy: flag("dry-run") !== "true", withData: flag("with-data") === "true" });
     console.log(r.url ? `✓ פורסם: ${r.url}` : "✓ נבנה (dry-run, לא הועלה)");
     break;
   }

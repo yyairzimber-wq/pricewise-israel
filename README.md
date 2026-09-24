@@ -81,16 +81,16 @@ server/src/
 
 **AI recognition ("צלם מוצר"):** start the server with `ANTHROPIC_API_KEY` in its environment (PowerShell: `$env:ANTHROPIC_API_KEY="…"`, then `npm run api`). Without it, `/recognize` answers 503 and the app says AI isn't set up. Barcodes visible in a photo are still read on the device.
 
-## Public link on Vercel (static snapshot)
+## Public link: Vercel app + GitHub-hosted daily data
 
-Live at **https://pricewise-israel.vercel.app**. Vercel can't run the price server, which needs an Israeli IP and a ~3 GB database, so the server exports a compact **daily snapshot** (`server/src/export.ts`, about 64 MB and 1,000 files). The app reads it in `static` mode (`src/core/providers/static.ts`). The link works even when this computer is off, and prices simply age: after 72 h they show as "לא עדכני".
+Live at **https://pricewise-israel.vercel.app**. Nothing runs on a personal computer:
 
-```bash
-npm run publish:vercel     # build + export + deploy (~15 min), uses this machine's Vercel login
-node server/src/cli.ts serve --refresh-hours 6 --stores all --publish-vercel   # auto-publish after each refresh
-```
+- **GitHub Actions** (`.github/workflows/refresh-prices.yml`) runs twice a day. It downloads the chains' files, restores saved branch locations (`server/geocache.json`), geocodes new branches, exports the compact snapshot (`server/src/export.ts`) and publishes it to **GitHub Pages** (`https://yyairzimber-wq.github.io/pricewise-israel/data`).
+- **Vercel** serves only the app (`npm run publish:vercel`, reads `.env.vercel`), which loads the snapshot from Pages in `static` mode (`src/core/providers/static.ts`). Redeploy only when the app code changes.
 
-Branch-level prices are reconstructed from per-chain exceptions. Branch-specific promotions and price history aren't in the snapshot. AI recognition isn't available on the static site. Vercel Hobby is for non-commercial use, so move to Pro before commercial launch.
+Some portals block servers outside Israel. From GitHub's cloud, Victory and Mahsanei Hashuk (laibcatalog), Hazi Hinam and Super-Pharm fail, so the public link covers the other **18 chains**, and the app lists those four under "אין לנו כרגע מחיר מאומת". To include them, run the refresh from an Israeli host (see below).
+
+Branch-level prices are reconstructed from per-chain exceptions. Branch-specific promotions, price history and AI recognition aren't part of the static site. Vercel Hobby is for non-commercial use.
 
 ## Deploying (one server: app + prices + AI)
 
