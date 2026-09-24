@@ -1,0 +1,63 @@
+# Twice a day: download the chains' price-transparency files, build the compact
+# snapshot, and publish it to GitHub Pages. The app on Vercel reads it from there,
+# so nothing has to run on a personal computer.
+#
+# Portals that block servers outside Israel (seen from US cloud: laibcatalog —
+# Victory & Mahsanei Hashuk —, Hazi Hinam, Super-Pharm) fail softly: the run
+# continues with the other chains (--allow-partial). To skip them outright, set a
+# repository variable PRICEWISE_SKIP_CHAINS, e.g. "victory,mahsanei-hashuk,hazi-hinam,super-pharm".
+name: Refresh prices
+
+on:
+  schedule:
+    - cron: "30 4 * * *" # 07:30 Israel (summer time)
+    - cron: "30 13 * * *" # 16:30 Israel
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: refresh-prices
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Download and parse price files
+        env:
+          PRICEWISE_SKIP_CHAINS: ${{ vars.PRICEWISE_SKIP_CHAINS }}
+        run: node server/src/cli.ts refresh --stores all --allow-partial --geocode-limit 200
+
+      - name: Build snapshot
+        run: node server/src/cli.ts export-static --out site
+
+      - name: Check snapshot
+        run: |
+          test -s site/data/meta.json
+          node -e "const m=require('./site/data/meta.json'); console.log('products', m.counts.products); if (m.counts.products < 10000) process.exit(1)"
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
