@@ -16,6 +16,7 @@ const STAGE = path.join(ROOT, "server", ".vercel-deploy", "pricewise-israel");
 const BUILD = path.join(ROOT, "server", ".vercel-build");
 
 const VERCEL_JSON = {
+  functions: { "api/recognize.mjs": { maxDuration: 60 } },
   headers: [
     { source: "/data/(.*)", headers: [{ key: "Cache-Control", value: "public, max-age=900, stale-while-revalidate=86400" }] },
     { source: "/assets/(.*)", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] },
@@ -42,6 +43,19 @@ export function publishVercel(db: DB, log: (m: string) => void, opts: { deploy?:
   for (const entry of fs.readdirSync(STAGE)) if (entry !== ".vercel") fs.rmSync(path.join(STAGE, entry), { recursive: true, force: true });
   fs.cpSync(BUILD, STAGE, { recursive: true });
   fs.writeFileSync(path.join(STAGE, "vercel.json"), JSON.stringify(VERCEL_JSON, null, 2));
+
+  // AI photo recognition as a Vercel Function (one self-contained file; the key
+  // comes from the project's ANTHROPIC_API_KEY environment variable).
+  log("אורז את פונקציית זיהוי התמונות…");
+  const fn = run(
+    "npx",
+    ["esbuild", "vercel/recognize-function.ts", "--bundle", "--platform=node", "--format=esm", "--target=node20",
+     `--outfile="${path.join(STAGE, "api", "recognize.mjs")}"`,
+     `"--banner:js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);"`],
+    ROOT,
+  );
+  if (!fn.ok) throw new Error(`function bundle failed:
+${fn.out.slice(-2000)}`);
 
   // 3. Price snapshot (only when bundling data with the app).
   if (opts.withData) {
