@@ -1,6 +1,7 @@
 import { Camera, ImagePlus, RotateCcw, ScanBarcode, Search, Sparkles, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { warmUpOcr } from "../../core/providers/recognition/ocr";
 import { RecognitionNotConfigured } from "../../core/providers/recognition/recognizers";
 import { recognizeProduct } from "../../core/services/recognition";
 import type { RecognitionCandidate, RecognitionResult } from "../../core/types";
@@ -10,7 +11,7 @@ import { DemoBanner, ProductThumb, Sheet } from "../components/primitives";
 
 type Phase = "starting" | "live" | "no-camera" | "processing" | "choose" | "error";
 
-const STEPS = ["מחפשים ברקוד בתמונה…", "קוראים את האריזה…", "מתאימים למאגר המוצרים…"];
+const STEPS = ["מחפשים ברקוד בתמונה…", "קוראים את הכיתוב על האריזה…", "מתאימים למאגר המוצרים…"];
 
 export function CaptureScreen() {
   const navigate = useNavigate();
@@ -55,10 +56,15 @@ export function CaptureScreen() {
     return stopStream;
   }, [startStream]);
 
+  // On-device reading needs a one-time engine download: start it while the user frames the shot.
+  useEffect(() => {
+    if (providers.recognizer.id === "ocr" || providers.recognizer.id === "ai-or-ocr") warmUpOcr();
+  }, [providers.recognizer]);
+
   useEffect(() => {
     if (phase !== "processing") return;
     setStep(0);
-    const id = window.setInterval(() => setStep((s) => Math.min(s + 1, STEPS.length - 1)), 1100);
+    const id = window.setInterval(() => setStep((s) => Math.min(s + 1, STEPS.length - 1)), 2500);
     return () => window.clearInterval(id);
   }, [phase]);
 
@@ -208,7 +214,11 @@ export function CaptureScreen() {
 
       <Sheet open={phase === "choose"} onClose={retake} label="בחירת מוצר">
         <h2>איזה מוצר צילמתם?</h2>
-        <p className="lead">הזיהוי לא ודאי מספיק כדי לבחור לבד — בחרו את המוצר הנכון מהרשימה.</p>
+        <p className="lead">
+          {result?.method === "text"
+            ? "זיהינו לפי הכיתוב על האריזה. בחרו את המוצר הנכון מהרשימה."
+            : "הזיהוי לא ודאי מספיק כדי לבחור לבד — בחרו את המוצר הנכון מהרשימה."}
+        </p>
         {result?.source.kind === "demo" && (
           <div style={{ marginBottom: 12 }}>
             <DemoBanner>
@@ -235,7 +245,11 @@ export function CaptureScreen() {
             ))}
           </div>
         ) : (
-          <p className="muted">לא זוהה מוצר בתמונה.</p>
+          <p className="muted">
+            {result?.method === "text"
+              ? "לא הצלחנו לקרוא כיתוב שמתאים למוצר במאגר. צלמו את חזית האריזה מקרוב ובאור טוב — או את הברקוד, שהוא הדרך המדויקת ביותר."
+              : "לא זוהה מוצר בתמונה."}
+          </p>
         )}
         <div className="btn-row" style={{ marginTop: 14 }}>
           <button className="btn" onClick={retake}>

@@ -4,8 +4,9 @@ import { DemoCatalogProvider } from "./catalog/DemoCatalogProvider";
 import { OpenFoodFactsCatalogProvider } from "./catalog/OpenFoodFactsCatalogProvider";
 import { HttpBranchProvider, HttpCatalogProvider, HttpPriceProvider } from "./http";
 import { DemoPriceProvider } from "./prices/DemoPriceProvider";
-import { DemoRecognizer, HttpVisionRecognizer, UnavailableRecognizer } from "./recognition/recognizers";
-import { StaticBranchProvider, StaticCatalogProvider, StaticPriceProvider, StaticSnapshot } from "./static";
+import { CatalogTextMatcher, FallbackRecognizer, OcrRecognizer } from "./recognition/ocr";
+import { DemoRecognizer, HttpVisionRecognizer } from "./recognition/recognizers";
+import { StaticBranchProvider, StaticCatalogProvider, StaticPriceProvider, StaticSnapshot, TextMatcher } from "./static";
 import type { BranchProvider, CatalogProvider, PriceProvider, RecognitionProvider } from "./types";
 
 export interface DataConfig {
@@ -46,12 +47,17 @@ export function createProviders(config: DataConfig): Providers {
   if (config.useOpenFoodFacts) catalogs.push(new OpenFoodFactsCatalogProvider());
 
   const real = useApi || useStatic;
+  const catalog = new CompositeCatalogProvider(catalogs);
+  // Real data: AI vision when a key is configured on the server, otherwise read the
+  // package text on-device (free). Demo data keeps the clearly-labelled demo picker.
+  const ai = config.aiEndpoint.trim();
+  const ocr = new OcrRecognizer(snap ? new TextMatcher(snap) : new CatalogTextMatcher(catalog));
+  const recognizer = real ? (ai ? new FallbackRecognizer(new HttpVisionRecognizer(ai), ocr) : ocr) : ai ? new HttpVisionRecognizer(ai) : new DemoRecognizer();
   return {
-    catalog: new CompositeCatalogProvider(catalogs),
+    catalog,
     prices: snap ? new StaticPriceProvider(snap) : useApi ? new HttpPriceProvider(config.apiBaseUrl) : new DemoPriceProvider(),
     branches: snap ? new StaticBranchProvider(snap) : useApi ? new HttpBranchProvider(config.apiBaseUrl) : new DemoBranchProvider(),
-    // With real data, never fall back to the demo picker (it would suggest fake products).
-    recognizer: config.aiEndpoint.trim() ? new HttpVisionRecognizer(config.aiEndpoint.trim()) : real ? new UnavailableRecognizer() : new DemoRecognizer(),
+    recognizer,
     config,
   };
 }

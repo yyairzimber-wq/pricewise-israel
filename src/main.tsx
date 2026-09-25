@@ -16,6 +16,28 @@ function applyTheme(theme: string) {
 applyTheme(useApp.getState().theme);
 useApp.subscribe((s) => applyTheme(s.theme));
 
+// After a new deploy, an already-open tab asks for screen chunks that no longer
+// exist ("Failed to fetch dynamically imported module"). Reload once to pick up
+// the new version instead of showing an error page.
+window.addEventListener("vite:preloadError", (e) => {
+  try {
+    if (sessionStorage.getItem("pw-reloaded") === location.href) return;
+    sessionStorage.setItem("pw-reloaded", location.href);
+  } catch {
+    /* storage blocked: reload anyway */
+  }
+  e.preventDefault();
+  location.reload();
+});
+// The page is healthy: allow the one-time reload again for the next deploy.
+window.setTimeout(() => {
+  try {
+    sessionStorage.removeItem("pw-reloaded");
+  } catch {
+    /* ignore */
+  }
+}, 15_000);
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <App />

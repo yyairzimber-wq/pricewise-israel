@@ -153,8 +153,8 @@ export interface RecognitionResult {
   /** True when the top candidate is good enough to open directly. */
   confident: boolean;
   source: DataSource;
-  /** How the product was found: decoded barcode in the photo, or AI vision. */
-  method: "barcode-in-photo" | "vision";
+  /** How the product was found: decoded barcode in the photo, AI vision, or on-device text reading. */
+  method: "barcode-in-photo" | "vision" | "text";
 }
 
 export interface PricePreferences {

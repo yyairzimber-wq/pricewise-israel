@@ -262,3 +262,164 @@ export class StaticBranchProvider implements BranchProvider {
     return list.slice(0, q.limit ?? 40).map((x) => x.b);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Text-on-pack matching (for on-device OCR): which products does this text describe?
+// ---------------------------------------------------------------------------
+
+export interface TextMatch {
+  product: Product;
+  /** Sum of matched-word weights (rarer words weigh more), plus a size bonus. */
+  score: number;
+  matched: string[];
+}
+
+// Package boilerplate (ingredients, kashrut, allergens…) — says nothing about which product it is.
+const STOP = new Set([
+  "של", "עם", "ללא", "מכיל", "רכיבים", "ערכים", "תזונתיים", "גרם", "גר", "ליטר", "מל", "יחידות", "יח", "משקל", "נטו",
+  "לפני", "תאריך", "שמור", "בקירור", "מוצר", "תוצרת", "ישראל", "יצרן", "יבואן", "בע", "מ", "את", "על", "או", "וכן",
+  "כשר", "בהשגחת", "השגחת", "הרבנות", "רבנות", "מהדרין", "לפסח", "פרווה", "חלבי", "אלרגנים", "לסימון", "האריזה", "אריזה",
+  "יוצר", "מיוצר", "ידי", "עי", "סגירה", "חוזרת", "משוך", "כאן", "פתח", "לפתוח", "טעים", "חדש", "מבצע", "מחיר", "מומלץ",
+  "הערכים", "אנרגיה", "קלוריות", "שומנים", "נתרן", "חלבונים", "פחמימות", "סוכרים", "מתוכם", "יותר", "פחות",
+]);
+
+// Brand names printed in Latin letters on the pack → how the chains spell them in Hebrew.
+const LATIN_BRANDS: Record<string, string[]> = {
+  nescafe: ["נסקפה"], tasters: ["טסטרס"], choice: ["צויס"], elite: ["עלית"], osem: ["אסם"], tnuva: ["תנובה"],
+  strauss: ["שטראוס"], coca: ["קוקה"], cola: ["קולה"], pepsi: ["פפסי"], sprite: ["ספרייט"], nutella: ["נוטלה"],
+  heinz: ["היינץ"], lipton: ["ליפטון"], ariel: ["אריאל"], sano: ["סנו"], telma: ["תלמה"], danone: ["דנונה"],
+  yoplait: ["יופלה"], nestle: ["נסטלה"], milka: ["מילקה"], oreo: ["אוראו"], kinder: ["קינדר"], pringles: ["פרינגלס"],
+  doritos: ["דוריטוס"], bamba: ["במבה"], bissli: ["ביסלי"], tapuchips: ["תפוצ"], prigat: ["פריגת"], jafora: ["יפאורה"],
+  neviot: ["נביעות"], eden: ["עדן"], barilla: ["ברילה"], knorr: ["קנור"], persil: ["פרסיל"], fairy: ["פיירי"],
+  colgate: ["קולגייט"], huggies: ["האגיס"], pampers: ["פמפרס"], nivea: ["ניוואה"], dove: ["דאב"], sugat: ["סוגת"],
+  wissotzky: ["ויסוצקי"], jacobs: ["גייקובס"], landwer: ["לנדוור"], tara: ["טרה"], yotvata: ["יטבתה"], gad: ["גד"],
+};
+
+/** Boilerplate, also with a one-letter prefix ("לפרווה", "האריזה"). */
+const isStop = (w: string) => STOP.has(w) || (/^[הובלמשכ]/.test(w) && STOP.has(w.slice(1)));
+
+const squashHe =(s: string) => s.replace(/[״"'׳\-]/g, "");
+
+function editDistance1(a: string, b: string): boolean {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  let j = 0;
+  let edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      i++;
+      j++;
+      continue;
+    }
+    if (++edits > 1) return false;
+    if (a.length > b.length) i++;
+    else if (b.length > a.length) j++;
+    else {
+      i++;
+      j++;
+    }
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1;
+}
+
+interface WordIndex {
+  rows: SearchTuple[];
+  byWord: Map<string, number[]>;
+  byLength: Map<number, string[]>;
+}
+
+export class TextMatcher {
+  private index?: Promise<WordIndex>;
+  private readonly snap: StaticSnapshot;
+  constructor(snap: StaticSnapshot) {
+    this.snap = snap;
+  }
+
+  private build(): Promise<WordIndex> {
+    this.index ??= this.snap.getSearch(0).then((rows) => {
+      const byWord = new Map<string, number[]>();
+      rows.forEach((r, i) => {
+        // Letters only, so "צויס200ג" still indexes "צויס".
+        const words = new Set(squashHe(`${r[1]} ${r[2] || ""}`).split(/[^א-ת]+/).filter((w) => w.length >= 2));
+        for (const w of words) {
+          const list = byWord.get(w);
+          if (list) list.push(i);
+          else byWord.set(w, [i]);
+        }
+      });
+      const byLength = new Map<number, string[]>();
+      for (const w of byWord.keys()) byLength.set(w.length, [...(byLength.get(w.length) ?? []), w]);
+      return { rows, byWord, byLength };
+    });
+    return this.index;
+  }
+
+  /**
+   * Rank products by how many (and how distinctive) of the OCR'd words appear in
+   * their name/brand. Tolerates one wrong letter in longer words, which is the
+   * typical OCR error ("וורנפלקס" → "קורנפלקס").
+   */
+  async match(text: string, limit = 6): Promise<TextMatch[]> {
+    const [meta, idx] = await Promise.all([this.snap.getMeta(), this.build()]);
+    const total = idx.rows.length;
+    const latin = (text.match(/[A-Za-z]{3,}/g) ?? []).flatMap((w) => LATIN_BRANDS[w.toLowerCase()] ?? []);
+    const hebrew = (text.match(/[א-ת"'׳״\-]{2,}/g) ?? []).map(squashHe);
+    const tokens = [...new Set([...hebrew, ...latin])].filter((w) => w.length >= 2 && !isStop(w) && (w.length >= 3 || latin.includes(w)));
+    // Numbers that can mean something: sizes ≥10, decimals ("1.5") and percentages ("3%").
+    // Lone single digits are mostly OCR noise from logos and textures.
+    const numbers = new Set(
+      [...text.matchAll(/(\d+(?:[.,]\d+)?)\s*(%)?/g)]
+        .filter(([, n, pct]) => pct || n.length >= 2)
+        .map(([, n]) => Number(n.replace(",", "."))),
+    );
+
+    const scores = new Map<number, { score: number; matched: Set<string>; numbers: number }>();
+    for (const t of tokens) {
+      const hits = new Map<string, number[]>();
+      const exact = idx.byWord.get(t);
+      if (exact) hits.set(t, exact);
+      // OCR often glues a stray letter or two onto the start of a word ("גיתנובה" → "תנובה").
+      for (const cut of [1, 2]) {
+        const rest = t.slice(cut);
+        if (!exact && rest.length >= 4 && idx.byWord.has(rest)) hits.set(rest, idx.byWord.get(rest)!);
+      }
+      if (t.length >= 5 && !exact) {
+        for (const len of [t.length - 1, t.length, t.length + 1]) {
+          for (const w of idx.byLength.get(len) ?? []) if (editDistance1(t, w)) hits.set(w, idx.byWord.get(w)!);
+        }
+      }
+      for (const [word, rowsWithWord] of hits) {
+        if (isStop(word) || rowsWithWord.length > total * 0.05) continue; // boilerplate, or too common to tell products apart
+        const weight = Math.log(total / rowsWithWord.length) * (word === t ? 1 : 0.8);
+        for (const i of rowsWithWord) {
+          const s = scores.get(i) ?? { score: 0, matched: new Set<string>(), numbers: 0 };
+          if (!s.matched.has(word)) {
+            s.score += weight;
+            s.matched.add(word);
+          }
+          scores.set(i, s);
+        }
+      }
+    }
+    // Numbers printed on the pack — size ("80", "750") or fat % ("3%") — separate
+    // otherwise-identical variants.
+    for (const [i, s] of scores) {
+      const own = new Set((idx.rows[i][1].match(/\d+(?:\.\d+)?/g) ?? []).map(Number));
+      if (idx.rows[i][5]) own.add(idx.rows[i][5]);
+      let hits = 0;
+      for (const n of own) if (numbers.has(n)) hits++;
+      s.numbers = Math.min(hits, 2);
+      s.score += 2 * s.numbers;
+    }
+    return [...scores.entries()]
+      // A single word counts only when a number on the pack agrees too — otherwise
+      // it's a guess ("אורז" alone fits hundreds of products).
+      .filter(([, s]) => s.score >= 6 && (s.matched.size >= 2 || s.numbers > 0))
+      .sort((a, b) => b[1].score - a[1].score || idx.rows[b[0]][3] - idx.rows[a[0]][3])
+      .slice(0, limit)
+      .map(([i, s]) => {
+        const r = idx.rows[i];
+        return { product: this.snap.toProduct(r[0], r[1], r[2], r[4], r[5], r[6], 0, meta), score: s.score, matched: [...s.matched] };
+      });
+  }
+}
