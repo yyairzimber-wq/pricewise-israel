@@ -67,6 +67,8 @@ interface AppState {
   addRecentSearch(q: string): void;
   clearRecentSearches(): void;
   resetAll(): void;
+  /** Back to the data source this build was made for (fixes a stale saved connection). */
+  resetDataConfig(): void;
 }
 
 const DEFAULTS = {
@@ -150,6 +152,7 @@ export const useApp = create<AppState>()(
         }),
       clearRecentSearches: () => set({ recentSearches: [] }),
       resetAll: () => set({ ...DEFAULTS }),
+      resetDataConfig: () => set({ data: DEFAULTS.data }),
     }),
     {
       name: "pricewise-il",

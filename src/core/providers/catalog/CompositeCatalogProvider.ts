@@ -54,6 +54,10 @@ export class CompositeCatalogProvider implements CatalogProvider {
         out.push(product);
       }
     }
+    // The main source (the first one) failed and nothing else found anything: that's a
+    // load error to show, not "no such product".
+    const primary = settled[0];
+    if (!out.length && primary?.status === "rejected") throw primary.reason instanceof Error ? primary.reason : new Error(String(primary.reason));
     return out.slice(0, limit);
   }
 }

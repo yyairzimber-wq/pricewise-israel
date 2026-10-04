@@ -1,4 +1,4 @@
-import { Clock, ScanBarcode, Search, X } from "lucide-react";
+import { Clock, ScanBarcode, Search, WifiOff, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { CATEGORY_LABEL } from "../../core/services/format";
@@ -30,6 +30,8 @@ export function SearchScreen() {
   const addRecent = useApp((s) => s.addRecentSearch);
   const clearRecent = useApp((s) => s.clearRecentSearches);
   const addHistory = useApp((s) => s.addHistory);
+  const resetDataConfig = useApp((s) => s.resetDataConfig);
+  const data = useApp((s) => s.data);
 
   useEffect(() => {
     setParams(debounced ? { q: debounced } : {}, { replace: true });
@@ -116,6 +118,28 @@ export function SearchScreen() {
                 ))}
               </div>
             </>
+          ) : results.error ? (
+            <EmptyState
+              icon={<WifiOff size={34} />}
+              title="לא הצלחנו לטעון את מאגר המוצרים"
+              text={`זו לא תוצאת חיפוש — המאגר לא נטען (${results.error.message}). מקור הנתונים: ${data.mode === "demo" ? "הדגמה" : data.mode === "api" ? data.apiBaseUrl : data.staticBaseUrl}`}
+              action={
+                <div className="btn-row">
+                  <button className="btn primary" onClick={() => results.reload()}>
+                    ניסיון חוזר
+                  </button>
+                  <button
+                    className="btn tinted"
+                    onClick={() => {
+                      resetDataConfig();
+                      window.location.reload();
+                    }}
+                  >
+                    איפוס חיבור לנתונים
+                  </button>
+                </div>
+              }
+            />
           ) : (
             <EmptyState
               icon={<Search size={34} />}
