@@ -7,6 +7,7 @@ import { bestPrice, freshness } from "../../core/services/pricing";
 import { useAsync, useIsDemo, useProduct, useProviders, useQuotes } from "../../state/hooks";
 import { useApp } from "../../state/store";
 import { SourceBadge } from "../components/PriceParts";
+import { PriceHistoryCard } from "../components/PriceHistoryCard";
 import { ChainAvatar, DemoBanner, EmptyState, ProductThumb, SkeletonRows } from "../components/primitives";
 import { Sparkline } from "../components/Sparkline";
 import { TopBar } from "../components/TopBar";
@@ -32,6 +33,8 @@ export function ProductDetailsScreen() {
     async () => (product && activeChain && prices.getHistory ? prices.getHistory(product, activeChain, 30) : []),
     [prices, product?.id, activeChain],
   );
+
+  const recorded = useAsync(async () => (product && prices.getPriceHistory ? prices.getPriceHistory(product) : null), [prices, product?.id]);
 
   if (productQ.loading) {
     return (
@@ -164,7 +167,9 @@ export function ProductDetailsScreen() {
         )}
       </section>
 
-      {prices.getHistory && quotes.length > 0 && (
+      {recorded.data && quotes.length > 0 && <PriceHistoryCard history={recorded.data} />}
+
+      {!prices.getPriceHistory && prices.getHistory && quotes.length > 0 && (
         <section className="section">
           <div className="section-head">
             <h2 className="section-title">מגמת מחיר — 30 יום</h2>

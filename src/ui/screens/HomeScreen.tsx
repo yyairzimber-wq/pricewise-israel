@@ -2,6 +2,7 @@ import { Camera, ChevronLeft, Heart, History, ScanBarcode, Search, ShoppingBaske
 import { Link, useNavigate } from "react-router-dom";
 import { useApp } from "../../state/store";
 import { useFavoritePrices, useIsDemo } from "../../state/hooks";
+import { InstallCard } from "../components/InstallCard";
 import { DemoBanner, ProductThumb } from "../components/primitives";
 import { BrandMark } from "../layout/AppShell";
 import { formatILS, formatSize } from "../../core/services/format";
@@ -91,6 +92,8 @@ export function HomeScreen() {
           </button>
         </div>
       </div>
+
+      <InstallCard />
 
       {drops.length > 0 && (
         <Link to="/favorites" className="card pad" style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16, border: "1px solid var(--accent)" }}>

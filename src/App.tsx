@@ -10,6 +10,7 @@ import { NearbyScreen } from "./ui/screens/NearbyScreen";
 import { FavoritesScreen } from "./ui/screens/FavoritesScreen";
 import { HistoryScreen } from "./ui/screens/HistoryScreen";
 import { SettingsScreen } from "./ui/screens/SettingsScreen";
+import { SharedListScreen } from "./ui/screens/SharedListScreen";
 
 const CaptureScreen = lazy(() => import("./ui/screens/CaptureScreen").then((m) => ({ default: m.CaptureScreen })));
 const ScanScreen = lazy(() => import("./ui/screens/ScanScreen").then((m) => ({ default: m.ScanScreen })));
@@ -24,6 +25,7 @@ const router = createHashRouter([
       { path: "/product/:id", element: <ResultsScreen /> },
       { path: "/product/:id/details", element: <ProductDetailsScreen /> },
       { path: "/basket", element: <BasketScreen /> },
+      { path: "/list/:data", element: <SharedListScreen /> },
       { path: "/nearby", element: <NearbyScreen /> },
       { path: "/favorites", element: <FavoritesScreen /> },
       { path: "/history", element: <HistoryScreen /> },

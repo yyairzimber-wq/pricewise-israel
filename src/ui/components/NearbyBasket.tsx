@@ -3,11 +3,13 @@ import { useMemo } from "react";
 import { formatILS } from "../../core/services/format";
 import { distanceKm, formatDistance, navigationLinks } from "../../core/services/geo";
 import { compareBasketNearby, type BranchStop } from "../../core/services/pricing";
+import { planShoppingTrip, type TripStop } from "../../core/services/trip";
 import type { Branch, PriceQuote } from "../../core/types";
 import { useGeo } from "../../state/geo";
 import { useAsync, useProviders } from "../../state/hooks";
 import { useApp, type BasketItem } from "../../state/store";
 import { ChainAvatar, Segmented } from "./primitives";
+import { TripPlanCard } from "./TripPlanCard";
 
 /**
  * "Where is the whole basket cheapest near me — including the drive?"
@@ -58,6 +60,13 @@ export function NearbyBasket({ basket }: { basket: BasketItem[] }) {
   );
   const best = results.find((r) => r.complete);
 
+  // Splitting the basket across up to 3 of those stores, driving included.
+  const trip = useMemo(() => {
+    if (!quotesQ.data || !stopsQ.data || basket.length < 2) return null;
+    const stops: TripStop[] = stopsQ.data.branches.map((b, i) => ({ ...stopsQ.data!.stops[i], lat: b.lat, lng: b.lng }));
+    return planShoppingTrip(basket, quotesQ.data, stops, geo.point, { prefs, costPerKm });
+  }, [quotesQ.data, stopsQ.data, basket, prefs, costPerKm, geo.point.lat, geo.point.lng]);
+
   return (
     <section className="section">
       <div className="section-head">
@@ -99,6 +108,8 @@ export function NearbyBasket({ basket }: { basket: BasketItem[] }) {
               ]}
             />
           </div>
+
+          {trip?.best && <TripPlanCard best={trip.best} single={trip.bestSingle} branches={stopsQ.data?.branches ?? []} costPerKm={costPerKm} />}
 
           {stopsQ.loading || quotesQ.loading ? (
             <div className="skeleton" style={{ height: 160, borderRadius: 22 }} />

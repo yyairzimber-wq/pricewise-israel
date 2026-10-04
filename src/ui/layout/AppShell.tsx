@@ -2,6 +2,7 @@ import { Heart, History, Home, MapPin, ScanBarcode, Search, Settings, ShoppingBa
 import { useEffect } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useApp } from "../../state/store";
+import { OfflineBanner } from "../components/InstallCard";
 import { ToastHost } from "../components/primitives";
 
 export function BrandMark({ className = "brand-mark" }: { className?: string }) {
@@ -53,6 +54,7 @@ export function AppShell() {
       </aside>
 
       <main className="main">
+        <OfflineBanner />
         <Outlet />
       </main>
 

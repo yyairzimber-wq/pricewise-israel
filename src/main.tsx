@@ -7,6 +7,7 @@ import "./styles/app.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { registerServiceWorker } from "./pwa";
 import { useApp } from "./state/store";
 
 function applyTheme(theme: string) {
@@ -37,6 +38,8 @@ window.setTimeout(() => {
     /* ignore */
   }
 }, 15_000);
+
+registerServiceWorker();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

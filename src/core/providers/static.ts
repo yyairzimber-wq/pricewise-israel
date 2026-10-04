@@ -1,6 +1,6 @@
 import { distanceKm } from "../services/geo";
 import { matchScore } from "../services/text";
-import type { Branch, CategoryId, DataSource, PriceQuote, Product, SizeUnit } from "../types";
+import type { Branch, CategoryId, DataSource, PriceHistory, PriceQuote, Product, SizeUnit } from "../types";
 import type { BranchProvider, BranchQuery, CatalogProvider, PriceProvider, PriceQuery } from "./types";
 
 /**
@@ -14,6 +14,8 @@ const SUPPORTED_FORMAT = 2;
 
 interface Meta {
   format: number;
+  /** Present once the snapshot carries price history (data/h/*.json). */
+  history?: { since: string; updated: string };
   generatedAt: string;
   chains: { id: string; name: string; portalUrl: string }[];
   units: SizeUnit[];
@@ -79,6 +81,16 @@ export class StaticSnapshot {
     if (!p) {
       p = this.json<Shard>(`p/${key}.json`);
       this.shards.set(key, p);
+    }
+    return p;
+  }
+  private histories = new Map<string, Promise<Record<string, Record<string, number[]>> | null>>();
+  getHistoryShard(barcode: string) {
+    const key = barcode.slice(-3).padStart(3, "0");
+    let p = this.histories.get(key);
+    if (!p) {
+      p = this.json<Record<string, Record<string, number[]>>>(`h/${key}.json`).catch(() => null);
+      this.histories.set(key, p);
     }
     return p;
   }
@@ -224,6 +236,23 @@ export class StaticPriceProvider implements PriceProvider {
 
     const quotes = tuples.map((t) => this.snap.chainQuote(product.id, t, meta));
     return query.chainIds ? quotes.filter((q) => query.chainIds!.includes(q.chainId)) : quotes;
+  }
+
+  async getPriceHistory(product: Product): Promise<PriceHistory | null> {
+    const barcode = product.barcode;
+    const meta = await this.snap.getMeta();
+    if (!barcode || !meta.history) return null;
+    const perChain = (await this.snap.getHistoryShard(barcode))?.[barcode];
+    if (!perChain) return null;
+    const dayIso = (d: number) => new Date(d * 86_400_000).toISOString().slice(0, 10);
+    const series = Object.entries(perChain).flatMap(([ci, flat]) => {
+      const chain = meta.chains[Number(ci)];
+      if (!chain) return [];
+      const points: PriceHistory["series"][number]["points"] = [];
+      for (let i = 0; i + 2 < flat.length; i += 3) points.push({ date: dayIso(flat[i]), regular: flat[i + 1], promo: flat[i + 2] || undefined });
+      return points.length ? [{ chainId: chain.id, points }] : [];
+    });
+    return series.length ? { since: meta.history.since, until: meta.history.updated, series } : null;
   }
 }
 

@@ -3,6 +3,7 @@ import path from "node:path";
 import { chainQuote, cleanManufacturer, guessCategory, parseSize, type StorePrice, type StorePromo } from "./aggregate.ts";
 import { CHAIN_NAMES, SOURCES } from "./config.ts";
 import type { DB } from "./db.ts";
+import { dayNumber, dayToIso, emptyHistory, recordPrice, type PreviousHistory } from "./history.ts";
 
 /**
  * Static snapshot of the whole price database, for hosting on a static CDN
@@ -14,6 +15,7 @@ import type { DB } from "./db.ts";
  *   data/search-0.json        [barcode, name, brand, chainCount, cat, sizeAmount, sizeUnit][] (2+ chains)
  *   data/search-1.json        same, single-chain products (loaded on demand)
  *   data/p/<000-999>.json     products + quotes, sharded by the barcode's last 3 digits
+ *   data/h/<000-999>.json     price history (changes only), see history.ts
  *
  * A quote is the chain-level price (most common across its branches) plus, per
  * chain, only the branches that DIFFER from it and which branches carry the
@@ -40,11 +42,15 @@ export interface ExportReport {
   ms: number;
 }
 
-export function exportStatic(db: DB, outDir: string, log: (m: string) => void): ExportReport {
+export function exportStatic(db: DB, outDir: string, log: (m: string) => void, opts: { history?: PreviousHistory } = {}): ExportReport {
   const t0 = Date.now();
+  const today = dayNumber(t0);
+  // Previous history (downloaded by the caller) + today's prices. Without it, history starts today.
+  const history = opts.history ?? emptyHistory(today);
   const dataDir = path.join(outDir, "data");
   fs.rmSync(dataDir, { recursive: true, force: true });
   fs.mkdirSync(path.join(dataDir, "p"), { recursive: true });
+  fs.mkdirSync(path.join(dataDir, "h"), { recursive: true });
   let bytes = 0;
   const write = (rel: string, value: unknown) => {
     const s = JSON.stringify(value);
@@ -170,6 +176,7 @@ export function exportStatic(db: DB, outDir: string, log: (m: string) => void): 
         presence,
         exceptions.length ? exceptions : 0,
       ]);
+      recordPrice(history.shards[Number(barcode.slice(-3))], barcode, ci, today, q.regular, q.promo ? q.promo.unitPrice : 0);
       pairs++;
     }
     if (!quotes.length) return;
@@ -199,6 +206,7 @@ export function exportStatic(db: DB, outDir: string, log: (m: string) => void): 
   if (current) flush(current, rows);
 
   shards.forEach((s, i) => write(`p/${String(i).padStart(3, "0")}.json`, s));
+  history.shards.forEach((s, i) => write(`h/${String(i).padStart(3, "0")}.json`, s));
   // Search index in two parts: products sold by 2+ chains first (what comparison is about),
   // single-chain products in a second file the app loads only when needed.
   search.sort((a, b) => (b[3] as number) - (a[3] as number));
@@ -211,6 +219,8 @@ export function exportStatic(db: DB, outDir: string, log: (m: string) => void): 
     units: UNITS,
     categories: CATEGORIES,
     counts: { products: productCount, pairs, branches: storeRows.length },
+    // Price history is tracked from this date; there is no earlier real data.
+    history: { since: history.since, updated: dayToIso(today) },
   });
 
   return { products: productCount, pairs, shards: 1000, bytes, ms: Date.now() - t0 };

@@ -105,6 +105,18 @@ export interface PriceQuote {
   source: DataSource;
 }
 
+/**
+ * Real recorded history of a product's shelf price per chain. It only goes back
+ * to `since` — the first day we recorded prices; nothing earlier is known and
+ * nothing is back-filled. Each point is a CHANGE: the price holds until the next
+ * point (or until `until`).
+ */
+export interface PriceHistory {
+  since: string;
+  until: string;
+  series: { chainId: ChainId; points: { date: string; regular: number; promo?: number }[] }[];
+}
+
 export interface PricePoint {
   date: string;
   price: number;

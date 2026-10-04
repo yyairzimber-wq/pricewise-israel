@@ -7,6 +7,7 @@ import { status } from "./repo.ts";
 import { recognitionConfigured } from "./recognize.ts";
 import { publishVercel } from "./publish.ts";
 import { exportStatic } from "./export.ts";
+import { dayNumber, loadPreviousHistory, previousSnapshotBase } from "./history.ts";
 import fs from "node:fs";
 
 /**
@@ -139,7 +140,11 @@ switch (cmd) {
   }
   case "export-static": {
     const out = flag("out") ?? "site";
-    const r = exportStatic(db, out, log);
+    // Price history: carry over what the previous published snapshot recorded (see history.ts).
+    const base = previousSnapshotBase();
+    const history = base ? await loadPreviousHistory(base, dayNumber(Date.now()), log) : undefined;
+    if (!base) console.log("  (אין כתובת לתמונת המצב הקודמת — ההיסטוריה מתחילה מחדש; הגדירו PRICEWISE_HISTORY_BASE כדי להמשיך אותה)");
+    const r = exportStatic(db, out, log, { history });
     console.log(`✓ ${r.products} products · ${(r.bytes / 1e6).toFixed(1)}MB → ${out}/data`);
     break;
   }

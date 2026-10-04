@@ -1,12 +1,13 @@
-import { Minus, Plus, Search, ShoppingBasket, Sparkles, Trash2, Trophy } from "lucide-react";
+import { Minus, Plus, Search, Share2, ShoppingBasket, Sparkles, Trash2, Trophy } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { formatILS, formatSize } from "../../core/services/format";
 import { compareBasket } from "../../core/services/pricing";
+import { shareUrl } from "../../core/services/share";
 import type { PriceQuote } from "../../core/types";
 import { useAsync, useIsDemo, useProviders } from "../../state/hooks";
 import { useApp } from "../../state/store";
-import { ChainAvatar, DemoBanner, EmptyState, ProductThumb, SkeletonRows } from "../components/primitives";
+import { ChainAvatar, DemoBanner, EmptyState, ProductThumb, SkeletonRows, toast } from "../components/primitives";
 import { TopBar } from "../components/TopBar";
 import { NearbyBasket } from "../components/NearbyBasket";
 
@@ -52,15 +53,38 @@ export function BasketScreen() {
 
   const worst = result?.mostExpensive?.total;
 
+  const share = async () => {
+    const lines = basket.filter((b) => b.product.barcode).map((b) => ({ barcode: b.product.barcode!, quantity: b.quantity }));
+    if (!lines.length) return toast("אין בסל מוצרים עם ברקוד לשיתוף");
+    const url = shareUrl(lines);
+    const text = `רשימת הקניות שלי (${lines.length} מוצרים) — השוואת מחירים ב-PriceWise:`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "רשימת קניות", text, url });
+        return;
+      }
+      await navigator.clipboard.writeText(`${text}
+${url}`);
+      toast("הקישור הועתק — אפשר להדביק בוואטסאפ");
+    } catch {
+      /* the user closed the share sheet */
+    }
+  };
+
   return (
     <div className="page">
       <TopBar
         back={false}
         title="השוואת סל"
         actions={
-          <button className="icon-btn plain" onClick={() => confirm("לרוקן את הסל?") && clearBasket()} aria-label="ריקון הסל">
-            <Trash2 size={20} />
-          </button>
+          <>
+            <button className="icon-btn plain" onClick={() => void share()} aria-label="שיתוף הרשימה">
+              <Share2 size={20} />
+            </button>
+            <button className="icon-btn plain" onClick={() => confirm("לרוקן את הסל?") && clearBasket()} aria-label="ריקון הסל">
+              <Trash2 size={20} />
+            </button>
+          </>
         }
       />
       <h1 className="large-title">השוואת סל</h1>

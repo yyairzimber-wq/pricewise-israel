@@ -3,6 +3,7 @@ import type {
   ChainId,
   GeoPoint,
   PricePoint,
+  PriceHistory,
   PriceQuote,
   Product,
   RecognitionResult,
@@ -35,6 +36,8 @@ export interface PriceProvider {
   /** Demo providers make the whole UI show the "נתוני הדגמה" disclaimer. */
   readonly isDemo: boolean;
   getQuotes(product: Product, query?: PriceQuery): Promise<PriceQuote[]>;
+  /** Recorded shelf-price history across chains (static snapshot). Null = none recorded. */
+  getPriceHistory?(product: Product): Promise<PriceHistory | null>;
   /** Optional — not every source keeps history. */
   getHistory?(product: Product, chainId: ChainId, days: number): Promise<PricePoint[]>;
 }

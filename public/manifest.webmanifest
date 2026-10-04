@@ -1,12 +1,26 @@
 {
   "name": "PriceWise ישראל",
   "short_name": "PriceWise",
-  "description": "השוואת מחירי מוצרי סופר בישראל",
+  "description": "השוואת מחירי מוצרי סופר בישראל — צילום, ברקוד, סל חכם והיסטוריית מחירים",
   "lang": "he",
   "dir": "rtl",
+  "id": "./",
   "start_url": "./",
+  "scope": "./",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#f5f6f8",
   "theme_color": "#0fa968",
-  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+  "categories": ["shopping", "finance"],
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "צילום מוצר", "url": "./#/capture", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] },
+    { "name": "סריקת ברקוד", "url": "./#/scan", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] },
+    { "name": "הסל שלי", "url": "./#/basket", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] }
+  ]
 }
