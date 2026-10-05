@@ -1,3 +1,4 @@
+import { expandImage } from "../../src/core/services/offImage.ts";
 import { SERVER_CONFIG } from "./config.ts";
 import type { DB } from "./db.ts";
 
@@ -22,7 +23,7 @@ export function cachedImages(db: DB, barcodes: string[]): Map<string, string> {
   const rows = db
     .prepare(`SELECT barcode, url FROM product_images WHERE url IS NOT NULL AND barcode IN (${barcodes.map(() => "?").join(",")})`)
     .all(...barcodes) as { barcode: string; url: string }[];
-  for (const r of rows) out.set(r.barcode, r.url);
+  for (const r of rows) out.set(r.barcode, expandImage(r.barcode, r.url));
   return out;
 }
 

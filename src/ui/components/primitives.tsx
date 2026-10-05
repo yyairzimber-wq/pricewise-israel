@@ -1,16 +1,27 @@
 import { AlertTriangle, ChevronLeft } from "lucide-react";
+import { useLocalPhoto } from "../../core/services/localPhotos";
+import { thumbOf } from "../../core/services/offImage";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { CATEGORY_TINT, formatSize } from "../../core/services/format";
 import type { Chain, Product } from "../../core/types";
 import { create } from "zustand";
 
-export function ProductThumb({ product, size }: { product: Pick<Product, "imageUrl" | "emoji" | "category" | "name">; size?: "lg" | "xl" }) {
+export function ProductThumb({ product, size }: { product: Pick<Product, "imageUrl" | "emoji" | "category" | "name"> & { barcode?: string }; size?: "lg" | "xl" }) {
   const [broken, setBroken] = useState(false);
+  // The user's own photo (this device only) stands in when there's no public one.
+  const own = useLocalPhoto(product.barcode);
+  const imageUrl = product.imageUrl && !broken ? product.imageUrl : undefined;
   const tint = CATEGORY_TINT[product.category] ?? "#e5e7eb";
   return (
-    <div className={`thumb ${size ?? ""}`} style={{ background: product.imageUrl && !broken ? "#fff" : `color-mix(in srgb, ${tint} 70%, var(--surface-2))` }} aria-hidden>
-      {product.imageUrl && !broken ? <img src={product.imageUrl} alt="" loading="lazy" onError={() => setBroken(true)} /> : <span>{product.emoji ?? "🛒"}</span>}
+    <div className={`thumb ${size ?? ""}`} style={{ background: imageUrl || own ? "#fff" : `color-mix(in srgb, ${tint} 70%, var(--surface-2))` }} aria-hidden>
+      {imageUrl ? (
+        <img src={size ? imageUrl : thumbOf(imageUrl)} alt="" loading="lazy" onError={() => setBroken(true)} />
+      ) : own ? (
+        <img src={own} alt="" />
+      ) : (
+        <span>{product.emoji ?? "🛒"}</span>
+      )}
     </div>
   );
 }

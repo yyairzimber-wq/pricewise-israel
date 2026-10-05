@@ -38,3 +38,11 @@ describe("TextMatcher (text read off a package → products)", () => {
     expect(await m.match("שלום עולם ABC")).toEqual([]);
   });
 });
+
+describe("snapshot product photos", () => {
+  it("expands the compact photo reference into an Open Food Facts URL", () => {
+    const p = snap.toProduct("7290000066318", "במבה", "אסם", 2, 80, 0, "he.29", meta as never);
+    expect(p.imageUrl).toBe("https://images.openfoodfacts.org/images/products/729/000/006/6318/front_he.29.400.jpg");
+    expect(snap.toProduct("7290000066318", "במבה", 0, 2, 80, 0, 0, meta as never).imageUrl).toBeUndefined();
+  });
+});

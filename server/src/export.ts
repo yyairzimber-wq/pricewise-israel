@@ -3,6 +3,7 @@ import path from "node:path";
 import { chainQuote, cleanManufacturer, guessCategory, parseSize, type StorePrice, type StorePromo } from "./aggregate.ts";
 import { CHAIN_NAMES, SOURCES } from "./config.ts";
 import type { DB } from "./db.ts";
+import { compactImage } from "../../src/core/services/offImage.ts";
 import { dayNumber, dayToIso, emptyHistory, recordPrice, type PreviousHistory } from "./history.ts";
 
 /**
@@ -86,7 +87,7 @@ export function exportStatic(db: DB, outDir: string, log: (m: string) => void, o
     products.set(String(r.barcode), r as never);
   }
   const images = new Map<string, string>();
-  for (const r of db.prepare("SELECT barcode, url FROM product_images WHERE url IS NOT NULL").iterate() as Iterable<{ barcode: string; url: string }>) images.set(r.barcode, r.url);
+  for (const r of db.prepare("SELECT barcode, url FROM product_images WHERE url IS NOT NULL").iterate() as Iterable<{ barcode: string; url: string }>) images.set(r.barcode, compactImage(r.barcode, r.url));
 
   // --- promos per (barcode, chain), via index order ---
   const promoIter = (

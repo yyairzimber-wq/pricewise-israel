@@ -7,6 +7,7 @@ import { status } from "./repo.ts";
 import { recognitionConfigured } from "./recognize.ts";
 import { publishVercel } from "./publish.ts";
 import { exportStatic } from "./export.ts";
+import { exportImages, importImages, syncImagesFromDump } from "./imagesync.ts";
 import { dayNumber, loadPreviousHistory, previousSnapshotBase } from "./history.ts";
 import fs from "node:fs";
 
@@ -124,6 +125,8 @@ switch (cmd) {
     const fresh = reports.reduce((n, r) => n + r.priceFiles + r.promoFiles, 0);
     const errors = reports.reduce((n, r) => n + r.errors.length, 0);
     console.log(`ingest: ${fresh} new files, ${errors} errors`);
+    const photos = importImages(db);
+    if (photos) console.log(`restored ${photos} product photos`);
     const restored = importGeocache(db, "server/geocache.json");
     if (restored) console.log(`restored ${restored} saved branch locations`);
     await geocodeStores(db, { onlyWithPrices: true, limit: Number(flag("geocode-limit") ?? 300), log });
@@ -146,6 +149,17 @@ switch (cmd) {
     if (!base) console.log("  (אין כתובת לתמונת המצב הקודמת — ההיסטוריה מתחילה מחדש; הגדירו PRICEWISE_HISTORY_BASE כדי להמשיך אותה)");
     const r = exportStatic(db, out, log, { history });
     console.log(`✓ ${r.products} products · ${(r.bytes / 1e6).toFixed(1)}MB → ${out}/data`);
+    break;
+  }
+  case "images-sync": {
+    // Product photos for the whole catalog from Open Food Facts' daily export (see imagesync.ts).
+    const r = await syncImagesFromDump(db, { source: flag("from"), log });
+    const n = exportImages(db);
+    console.log(`✓ ${r.scanned.toLocaleString()} מוצרים ב-OFF נסרקו · ${r.matched.toLocaleString()} קיימים אצלנו · ${r.withPhoto.toLocaleString()} עם תמונה · נשמרו ${n.toLocaleString()} ב-server/images.json`);
+    break;
+  }
+  case "images-export": {
+    console.log(`✓ ${exportImages(db)} product photos → server/images.json`);
     break;
   }
   case "geocache-export": {

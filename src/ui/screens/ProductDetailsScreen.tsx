@@ -4,9 +4,10 @@ import { Link, useParams } from "react-router-dom";
 import { getChain } from "../../core/data/chains";
 import { CATEGORY_LABEL, formatDate, formatDateTime, formatILS, formatSize, unitPrice } from "../../core/services/format";
 import { bestPrice, freshness } from "../../core/services/pricing";
-import { useAsync, useIsDemo, useProduct, useProviders, useQuotes } from "../../state/hooks";
+import { useAsync, useIsDemo, useProduct, useProviders, useQuotes, useWithPhoto } from "../../state/hooks";
 import { useApp } from "../../state/store";
 import { SourceBadge } from "../components/PriceParts";
+import { AddPhotoButton } from "../components/AddPhotoButton";
 import { PriceHistoryCard } from "../components/PriceHistoryCard";
 import { ChainAvatar, DemoBanner, EmptyState, ProductThumb, SkeletonRows } from "../components/primitives";
 import { Sparkline } from "../components/Sparkline";
@@ -15,7 +16,7 @@ import { TopBar } from "../components/TopBar";
 export function ProductDetailsScreen() {
   const { id } = useParams();
   const productQ = useProduct(id);
-  const product = productQ.data ?? null;
+  const product = useWithPhoto(productQ.data) ?? null;
   const quotesQ = useQuotes(product);
   const { prices } = useProviders();
   const isDemo = useIsDemo();
@@ -64,6 +65,9 @@ export function ProductDetailsScreen() {
         </div>
         <h1 className="product-name" style={{ marginTop: 14 }}>{product.name}</h1>
         <div className="muted">{[product.brand, formatSize(product.size)].filter(Boolean).join(" · ")}</div>
+        <div style={{ marginTop: 8 }}>
+          <AddPhotoButton barcode={product.barcode} hasPublicPhoto={!!product.imageUrl} />
+        </div>
       </div>
 
       {isDemo && (

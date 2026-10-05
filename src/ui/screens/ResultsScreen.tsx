@@ -4,7 +4,8 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { getChain } from "../../core/data/chains";
 import { formatILS, formatPercent, formatSize } from "../../core/services/format";
 import { compareProduct, type ComparisonRow } from "../../core/services/pricing";
-import { haptic, useIsDemo, useProduct, useQuotes } from "../../state/hooks";
+import { AddPhotoButton } from "../components/AddPhotoButton";
+import { haptic, useIsDemo, useProduct, useQuotes, useWithPhoto } from "../../state/hooks";
 import { useApp } from "../../state/store";
 import { FreshnessBadge, KindBadge, QuoteMeta } from "../components/PriceParts";
 import { ChainAvatar, DemoBanner, EmptyState, ProductThumb, SkeletonRows, toast } from "../components/primitives";
@@ -14,7 +15,7 @@ export function ResultsScreen() {
   const { id } = useParams();
   const navigate = useNavigate();
   const productQ = useProduct(id);
-  const product = productQ.data ?? null;
+  const product = useWithPhoto(productQ.data) ?? null;
   const quotesQ = useQuotes(product);
   const isDemo = useIsDemo();
 
@@ -113,6 +114,7 @@ export function ResultsScreen() {
           <div className="muted" style={{ marginTop: 2 }}>{[product.brand, formatSize(product.size)].filter(Boolean).join(" · ")}</div>
           <div className="product-meta">
             {product.barcode && <span className="badge num">{product.barcode}</span>}
+            <AddPhotoButton barcode={product.barcode} hasPublicPhoto={!!product.imageUrl} />
             <Link to={`/product/${encodeURIComponent(product.id)}/details`} className="badge blue">
               <Info size={12} /> פרטי מוצר
             </Link>

@@ -1,6 +1,7 @@
 import { Camera, ImagePlus, RotateCcw, ScanBarcode, Search, Sparkles, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { savePhoto } from "../../core/services/localPhotos";
 import { warmUpOcr } from "../../core/providers/recognition/ocr";
 import { RecognitionNotConfigured } from "../../core/providers/recognition/recognizers";
 import { recognizeProduct } from "../../core/services/recognition";
@@ -68,7 +69,10 @@ export function CaptureScreen() {
     return () => window.clearInterval(id);
   }, [phase]);
 
+  const shotRef = useRef<Blob | null>(null);
+
   const analyze = async (blob: Blob) => {
+    shotRef.current = blob;
     setStill(URL.createObjectURL(blob));
     stopStream();
     setPhase("processing");
@@ -107,7 +111,10 @@ export function CaptureScreen() {
     if (f) void analyze(f);
   };
 
-  const open = (c: RecognitionCandidate) => {
+  const open = (c: RecognitionCandidate, picked = false) => {
+    // The user chose this product from the list for the photo they just took: if it has no
+    // public photo, keep that photo on this device as its picture.
+    if (picked && c.product?.barcode && !c.product.imageUrl && shotRef.current) void savePhoto(c.product.barcode, shotRef.current).catch(() => undefined);
     if (c.product) {
       providers.catalog.remember(c.product);
       addHistory(c.product, "photo");
@@ -229,7 +236,7 @@ export function CaptureScreen() {
         {result && result.candidates.length > 0 ? (
           <div className="list stagger">
             {result.candidates.map((c, i) => (
-              <button className="row" key={i} onClick={() => open(c)}>
+              <button className="row" key={i} onClick={() => open(c, true)}>
                 {c.product ? <ProductThumb product={c.product} /> : <div className="thumb">❔</div>}
                 <div className="row-main">
                   <div className="row-title">{c.product?.name ?? c.name}</div>

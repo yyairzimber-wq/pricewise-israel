@@ -51,6 +51,27 @@ export function useProduct(productId: string | undefined) {
   return useAsync(async () => (productId ? catalog.getById(decodeURIComponent(productId)) : null), [catalog, productId]);
 }
 
+/** The product with a photo filled in from Open Food Facts when the snapshot doesn't have one. */
+export function useWithPhoto(product: Product | null | undefined): Product | null | undefined {
+  const [found, setFound] = useState<{ barcode: string; url: string } | null>(null);
+  const barcode = product?.barcode;
+  const needs = !!product && !product.imageUrl && !!barcode;
+  useEffect(() => {
+    if (!needs || !barcode) return;
+    let cancelled = false;
+    void import("../core/services/photoLookup").then(({ lookupPhoto }) =>
+      lookupPhoto(barcode).then((url) => {
+        if (!cancelled && url) setFound({ barcode, url });
+      }),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [needs, barcode]);
+  if (!product || !needs || found?.barcode !== barcode) return product;
+  return { ...product, imageUrl: found.url };
+}
+
 export function useQuotes(product: Product | null | undefined) {
   const { prices } = useProviders();
   return useAsync<PriceQuote[]>(async () => (product ? prices.getQuotes(product) : []), [prices, product?.id]);

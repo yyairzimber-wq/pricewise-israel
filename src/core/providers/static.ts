@@ -1,4 +1,5 @@
 import { distanceKm } from "../services/geo";
+import { expandImage } from "../services/offImage";
 import { matchScore } from "../services/text";
 import type { Branch, CategoryId, DataSource, PriceHistory, PriceQuote, Product, SizeUnit } from "../types";
 import type { BranchProvider, BranchQuery, CatalogProvider, PriceProvider, PriceQuery } from "./types";
@@ -109,7 +110,7 @@ export class StaticSnapshot {
       size: sizeAmount > 0 && sizeUnit >= 0 ? { amount: sizeAmount, unit: meta.units[sizeUnit] } : undefined,
       category,
       emoji: EMOJI[category],
-      imageUrl: image || undefined,
+      imageUrl: image ? expandImage(barcode, image) : undefined,
       source: PRODUCT_SOURCE,
     };
   }
