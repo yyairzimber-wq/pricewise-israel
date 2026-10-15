@@ -40,6 +40,20 @@ export interface RecognizedCandidate {
 
 export class RecognitionUnavailable extends Error {}
 
+/** ~5 MB of image once decoded — the API's own limit — as base64 text. */
+export const MAX_IMAGE_BASE64 = 7_000_000;
+
+/**
+ * Validate an untrusted request body: a base64 image string of sane size and a
+ * media type we pass on. Returns null for anything else (arrays, numbers, null…).
+ */
+export function parseRecognizeBody(body: unknown, maxLength = MAX_IMAGE_BASE64): { image: string; mediaType: "image/jpeg" | "image/png" } | null {
+  if (!body || typeof body !== "object") return null;
+  const { image, mediaType } = body as { image?: unknown; mediaType?: unknown };
+  if (typeof image !== "string" || image.length < 100 || image.length > maxLength || !/^[A-Za-z0-9+/]+={0,2}$/.test(image)) return null;
+  return { image, mediaType: mediaType === "image/png" ? "image/png" : "image/jpeg" };
+}
+
 let client: Anthropic | null = null;
 function getClient(): Anthropic {
   if (client) return client;

@@ -23,7 +23,7 @@ export const CHAINS: Chain[] = [
   { id: "zol-vebegadol", name: "זול ובגדול", nameEn: "Zol Vebegadol", color: "#e85d04", initials: "זב", kind: "supermarket" },
   { id: "stop-market", name: "סטופ מרקט", nameEn: "Stop Market", color: "#d62828", initials: "סמ", kind: "supermarket" },
   { id: "super-sapir", name: "סופר ספיר", nameEn: "Super Sapir", color: "#2a9d8f", initials: "סס", kind: "supermarket" },
-  { id: "shuk-hayir", name: "שוק העיר", nameEn: "Shuk Hayir", color: "#588157", initials: "שה", kind: "supermarket" },
+  { id: "shuk-hayir", name: "שוק העיר", nameEn: "Shuk Hayir", color: "#4a7449", initials: "שה", kind: "supermarket" },
   { id: "shefa-birkat-hashem", name: "שפע ברכת השם", nameEn: "Shefa Birkat Hashem", color: "#7f5539", initials: "שב", kind: "supermarket" },
   { id: "bareket", name: "ברקת", nameEn: "Bareket", color: "#0077b6", initials: "בר", kind: "supermarket" },
   { id: "politzer", name: "פוליצר", nameEn: "Politzer", color: "#6d597a", initials: "פו", kind: "local" },

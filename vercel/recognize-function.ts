@@ -11,7 +11,7 @@
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { RateLimiter } from "../server/src/ratelimit.ts";
-import { recognitionConfigured, recognizeImage } from "../server/src/recognize.ts";
+import { parseRecognizeBody, recognitionConfigured, recognizeImage } from "../server/src/recognize.ts";
 
 const perHour = new RateLimiter(12, 3_600_000);
 const perMinute = new RateLimiter(4, 60_000);
@@ -21,8 +21,8 @@ function send(res: ServerResponse, status: number, body: unknown) {
   res.end(JSON.stringify(body));
 }
 
-async function readBody(req: IncomingMessage & { body?: unknown }): Promise<{ image?: string; mediaType?: string }> {
-  if (req.body && typeof req.body === "object") return req.body as never; // already parsed by the platform
+async function readBody(req: IncomingMessage & { body?: unknown }): Promise<unknown> {
+  if (req.body && typeof req.body === "object") return req.body; // already parsed by the platform
   let raw = "";
   for await (const chunk of req) {
     raw += chunk;
@@ -43,16 +43,17 @@ export default async function handler(req: IncomingMessage & { body?: unknown },
     return send(res, 429, { error: "too many photos, try again later" });
   }
 
-  let body: { image?: string; mediaType?: string };
+  let raw: unknown;
   try {
-    body = await readBody(req);
-  } catch {
-    return send(res, 413, { error: "image too large" });
+    raw = await readBody(req);
+  } catch (e) {
+    return send(res, e instanceof SyntaxError ? 400 : 413, { error: e instanceof SyntaxError ? "invalid JSON" : "image too large" });
   }
-  if (!body.image || body.image.length > 4_000_000) return send(res, 400, { error: "missing or oversized image" });
+  const body = parseRecognizeBody(raw, 4_000_000);
+  if (!body) return send(res, 400, { error: "missing, malformed or oversized image" });
 
   try {
-    const candidates = await recognizeImage(body.image, body.mediaType === "image/png" ? "image/png" : "image/jpeg");
+    const candidates = await recognizeImage(body.image, body.mediaType);
     return send(res, 200, { candidates });
   } catch (e) {
     const status = (e as { status?: number }).status;

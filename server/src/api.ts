@@ -2,9 +2,10 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { CHAIN_NAMES } from "./config.ts";
+import { BASE_SECURITY_HEADERS as SECURITY_HEADERS } from "./securityHeaders.ts";
 import type { DB } from "./db.ts";
 import { clientIp, RateLimiter } from "./ratelimit.ts";
-import { RecognitionUnavailable, recognitionConfigured, recognizeImage, Anthropic } from "./recognize.ts";
+import { parseRecognizeBody, RecognitionUnavailable, recognitionConfigured, recognizeImage, Anthropic } from "./recognize.ts";
 import { barcodeFromId, branches, history, productByBarcode, quotesFor, searchProducts, status } from "./repo.ts";
 
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
@@ -49,15 +50,16 @@ async function readBody(req: http.IncomingMessage, limit: number): Promise<strin
 
 async function handleRecognize(req: http.IncomingMessage, _res: http.ServerResponse, send: Send) {
   if (!recognitionConfigured()) return send(503, { error: "AI recognition is not configured on this server (set ANTHROPIC_API_KEY)" });
-  let body: { image?: string; mediaType?: string };
+  let raw: unknown;
   try {
-    body = JSON.parse(await readBody(req, 9_000_000));
+    raw = JSON.parse(await readBody(req, 9_000_000));
   } catch {
-    return send(413, { error: "invalid or oversized image" });
+    return send(413, { error: "invalid or oversized request" });
   }
-  if (!body.image) return send(400, { error: "missing image" });
+  const body = parseRecognizeBody(raw);
+  if (!body) return send(400, { error: "missing, malformed or oversized image" });
   try {
-    const candidates = await recognizeImage(body.image, body.mediaType === "image/png" ? "image/png" : "image/jpeg");
+    const candidates = await recognizeImage(body.image, body.mediaType);
     return send(200, { candidates });
   } catch (e) {
     if (e instanceof RecognitionUnavailable) return send(503, { error: "AI recognition is not configured" });
@@ -76,23 +78,53 @@ const MIME: Record<string, string> = {
 
 /** Hash-routed SPA: "/" → index.html, everything else must be a real file under dist/. */
 function serveStatic(dir: string, pathname: string, res: http.ServerResponse): boolean {
-  const rel = pathname === "/" ? "index.html" : decodeURIComponent(pathname).replace(/^\/+/, "");
-  const file = path.resolve(dir, rel);
-  if (!file.startsWith(path.resolve(dir)) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return false;
+  let rel: string;
+  try {
+    rel = pathname === "/" ? "index.html" : decodeURIComponent(pathname).replace(/^\/+/, "");
+  } catch {
+    return false; // malformed %-escape: not a file
+  }
+  if (rel.includes("\0")) return false;
+  const root = path.resolve(dir);
+  const file = path.resolve(root, rel);
+  // Must stay INSIDE dist/ ("dist-secret/" also starts with "dist", so compare with a separator).
+  if (!file.startsWith(root + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return false;
   const immutable = rel.startsWith("assets/");
-  res.writeHead(200, { "Content-Type": MIME[path.extname(file)] ?? "application/octet-stream", "Cache-Control": immutable ? "public, max-age=31536000, immutable" : "no-cache" });
+  res.writeHead(200, {
+    "Content-Type": MIME[path.extname(file)] ?? "application/octet-stream",
+    "Cache-Control": immutable ? "public, max-age=31536000, immutable" : "no-cache",
+    ...SECURITY_HEADERS,
+  });
   fs.createReadStream(file).pipe(res);
   return true;
 }
 
 export function createApiServer(db: DB, opts: { corsOrigin?: string; staticDir?: string } = {}) {
-  return http.createServer(async (req, res) => {
-    const url = new URL(req.url ?? "/", "http://localhost");
+  const handler = createHandler(db, opts);
+  return http.createServer((req, res) => {
+    handler(req, res).catch((e) => {
+      console.error("request failed", req.method, req.url, e);
+      if (!res.headersSent) res.writeHead(500, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+      if (!res.writableEnded) res.end(JSON.stringify({ error: "internal error" }));
+    });
+  });
+}
+
+function createHandler(db: DB, opts: { corsOrigin?: string; staticDir?: string }) {
+  return async (req: http.IncomingMessage, res: http.ServerResponse) => {
+    let url: URL;
+    try {
+      url = new URL(req.url ?? "/", "http://localhost");
+    } catch {
+      res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+      return void res.end(JSON.stringify({ error: "bad request" }));
+    }
     const send = (status: number, body: unknown, maxAge = 0) => {
       res.writeHead(status, {
         "Content-Type": "application/json; charset=utf-8",
         "Access-Control-Allow-Origin": opts.corsOrigin ?? "*",
         "Cache-Control": maxAge ? `public, max-age=${maxAge}` : "no-store",
+        ...SECURITY_HEADERS,
       });
       res.end(JSON.stringify(body));
     };
@@ -134,7 +166,11 @@ export function createApiServer(db: DB, opts: { corsOrigin?: string; staticDir?:
 
     const p = url.searchParams;
     const list = (k: string) => p.get(k)?.split(",").map((s) => s.trim()).filter(Boolean) || undefined;
-    const numParam = (k: string) => (p.get(k) != null && p.get(k) !== "" ? Number(p.get(k)) : undefined);
+    // A number or undefined — never NaN/Infinity, which would reach SQL LIMITs and distance maths.
+    const numParam = (k: string) => {
+      const n = p.get(k) != null && p.get(k) !== "" ? Number(p.get(k)) : undefined;
+      return n != null && Number.isFinite(n) ? n : undefined;
+    };
 
     try {
       const path = apiPath;
@@ -142,7 +178,7 @@ export function createApiServer(db: DB, opts: { corsOrigin?: string; staticDir?:
       if (path === "/health" || path === "/status") return send(200, { ok: true, ai: recognitionConfigured(), ...status(db) });
 
       if (path === "/") {
-        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", ...SECURITY_HEADERS });
         return res.end(statusPage(status(db)));
       }
 
@@ -187,5 +223,5 @@ export function createApiServer(db: DB, opts: { corsOrigin?: string; staticDir?:
       console.error(e);
       return send(500, { error: "internal error" });
     }
-  });
+  };
 }

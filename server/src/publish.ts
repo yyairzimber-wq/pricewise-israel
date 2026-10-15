@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { DB } from "./db.ts";
 import { exportStatic } from "./export.ts";
+import { BASE_SECURITY_HEADERS, contentSecurityPolicy, originOf } from "./securityHeaders.ts";
 
 /**
  * Publish the app + a fresh price snapshot to Vercel as a static site.
@@ -15,13 +16,33 @@ const ROOT = path.resolve(new URL("../..", import.meta.url).pathname.replace(/^\
 const STAGE = path.join(ROOT, "server", ".vercel-deploy", "pricewise-israel");
 const BUILD = path.join(ROOT, "server", ".vercel-build");
 
-const VERCEL_JSON = {
+/** The host the build fetches prices from (VITE_STATIC_BASE_URL in .env.vercel), so the CSP allows exactly that. */
+function snapshotOrigin(): string | null {
+  try {
+    const env = fs.readFileSync(path.join(ROOT, ".env.vercel"), "utf8");
+    return originOf(/^VITE_STATIC_BASE_URL=(.+)$/m.exec(env)?.[1]?.trim());
+  } catch {
+    return null;
+  }
+}
+
+function vercelJson() {
+  const connect = [snapshotOrigin()].filter((o): o is string => !!o);
+  const security = [
+    ...Object.entries(BASE_SECURITY_HEADERS).map(([key, value]) => ({ key, value })),
+    { key: "Content-Security-Policy", value: contentSecurityPolicy({ connect }) },
+  ];
+  return {
   functions: { "api/recognize.mjs": { maxDuration: 60 } },
   headers: [
+    { source: "/(.*)", headers: security },
+    // The service worker must always be re-checked, or an update could be held back for a day.
+    { source: "/sw.js", headers: [{ key: "Cache-Control", value: "no-cache" }] },
     { source: "/data/(.*)", headers: [{ key: "Cache-Control", value: "public, max-age=900, stale-while-revalidate=86400" }] },
     { source: "/assets/(.*)", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] },
   ],
-};
+  };
+}
 
 function run(cmd: string, args: string[], cwd: string): { ok: boolean; out: string } {
   const r = spawnSync(cmd, args, { cwd, shell: true, encoding: "utf8", env: process.env, maxBuffer: 64 * 1024 * 1024 });
@@ -42,7 +63,7 @@ export function publishVercel(db: DB, log: (m: string) => void, opts: { deploy?:
   fs.mkdirSync(STAGE, { recursive: true });
   for (const entry of fs.readdirSync(STAGE)) if (entry !== ".vercel") fs.rmSync(path.join(STAGE, entry), { recursive: true, force: true });
   fs.cpSync(BUILD, STAGE, { recursive: true });
-  fs.writeFileSync(path.join(STAGE, "vercel.json"), JSON.stringify(VERCEL_JSON, null, 2));
+  fs.writeFileSync(path.join(STAGE, "vercel.json"), JSON.stringify(vercelJson(), null, 2));
 
   // AI photo recognition as a Vercel Function (one self-contained file; the key
   // comes from the project's ANTHROPIC_API_KEY environment variable).

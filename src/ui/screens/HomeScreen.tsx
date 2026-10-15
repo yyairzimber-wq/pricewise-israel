@@ -49,8 +49,8 @@ export function HomeScreen() {
           <div className="hero-icon">
             <Camera size={40} strokeWidth={1.8} />
           </div>
-          <div className="hero-label">📷 צלם מוצר</div>
-          <div className="hero-sub">צלמו את האריזה — ה-AI יזהה את המוצר וישווה מחירים</div>
+          <div className="hero-label">צלם מוצר</div>
+          <div className="hero-sub">צלמו את האריזה — נזהה את המוצר ונשווה מחירים</div>
         </button>
 
         <div className="action-grid stagger">

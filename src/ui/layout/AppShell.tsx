@@ -1,9 +1,9 @@
 import { Heart, History, Home, MapPin, ScanBarcode, Search, Settings, ShoppingBasket, Camera } from "lucide-react";
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useApp } from "../../state/store";
 import { OfflineBanner } from "../components/InstallCard";
-import { ToastHost } from "../components/primitives";
+import { SkeletonRows, ToastHost } from "../components/primitives";
 
 export function BrandMark({ className = "brand-mark" }: { className?: string }) {
   return <img className={className} src="./icon.svg" alt="" />;
@@ -55,7 +55,9 @@ export function AppShell() {
 
       <main className="main">
         <OfflineBanner />
-        <Outlet />
+        <Suspense fallback={<div className="page"><SkeletonRows count={5} /></div>}>
+          <Outlet />
+        </Suspense>
       </main>
 
       <nav className="tabbar" aria-label="ניווט ראשי">

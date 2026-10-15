@@ -63,7 +63,7 @@ export function useWithPhoto(product: Product | null | undefined): Product | nul
       lookupPhoto(barcode).then((url) => {
         if (!cancelled && url) setFound({ barcode, url });
       }),
-    );
+    ).catch(() => undefined); // a missing photo is never an error worth showing
     return () => {
       cancelled = true;
     };

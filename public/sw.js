@@ -8,7 +8,7 @@
  *  - OCR engine (jsdelivr): cache first
  *  - everything else (e.g. the POST to /api/recognize): untouched
  */
-const VERSION = "v1";
+const VERSION = "v2";
 const SHELL = `pw-shell-${VERSION}`;
 const ASSETS = `pw-assets-${VERSION}`;
 const DATA = `pw-data-${VERSION}`;
@@ -31,14 +31,17 @@ async function trim(cache, max) {
   for (let i = 0; i < keys.length - max; i++) await cache.delete(keys[i]);
 }
 
-async function networkFirst(request, cacheName) {
+/** The app is one page (hash routes), so every navigation is cached under the same key — the app's root. */
+const rootUrl = () => new URL("./", self.registration.scope).href;
+
+async function networkFirst(request, cacheName, key = request) {
   const cache = await caches.open(cacheName);
   try {
     const res = await fetch(request);
-    if (res.ok) cache.put(request, res.clone());
+    if (res.ok) cache.put(key, res.clone());
     return res;
   } catch (e) {
-    const hit = (await cache.match(request)) || (await cache.match(new URL("./", self.registration.scope).href));
+    const hit = (await cache.match(key)) || (await cache.match(rootUrl()));
     if (hit) return hit;
     throw e;
   }
@@ -80,7 +83,7 @@ self.addEventListener("fetch", (event) => {
   const sameOrigin = url.origin === self.location.origin;
 
   if (request.mode === "navigate") {
-    event.respondWith(networkFirst(request, SHELL));
+    event.respondWith(networkFirst(request, SHELL, rootUrl()));
   } else if (sameOrigin && url.pathname.includes("/assets/")) {
     event.respondWith(cacheFirst(request, ASSETS));
   } else if (url.pathname.includes("/data/") && url.pathname.endsWith(".json")) {

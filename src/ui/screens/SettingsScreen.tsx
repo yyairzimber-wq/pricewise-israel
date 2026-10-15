@@ -171,11 +171,11 @@ export function SettingsScreen() {
           )}
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
             <Sparkles size={18} />
-            <b style={{ flex: 1 }}>זיהוי מוצרים מתמונה (AI)</b>
+            <b style={{ flex: 1 }}>זיהוי מוצרים מתמונה</b>
             <span className={`badge ${recognizer.isDemo ? "warn" : "green"}`}>{recognizer.isDemo ? "לא מחובר" : "מחובר"}</span>
           </div>
           <div className="field">
-            <label htmlFor="ai">כתובת שירות הזיהוי</label>
+            <label htmlFor="ai">כתובת שירות זיהוי AI (לא חובה — בלעדיו הזיהוי נעשה בתוך המכשיר)</label>
             <input id="ai" className="input ltr" placeholder="/api/recognize" value={aiUrl} onChange={(e) => setAiUrl(e.target.value)} />
           </div>
           <button className="btn sm tinted" onClick={saveData}>שמירה</button>

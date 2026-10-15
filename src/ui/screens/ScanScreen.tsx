@@ -183,7 +183,7 @@ export function ScanScreen() {
         </p>
         <div style={{ display: "grid", gap: 10 }}>
           <button className="btn primary block" onClick={() => navigate("/capture", { replace: true })}>
-            <Camera size={18} /> זיהוי מתמונה עם AI
+            <Camera size={18} /> זיהוי מתמונה
           </button>
           <button className="btn tinted block" onClick={() => navigate("/search", { replace: true })}>
             <Search size={18} /> חיפוש לפי שם

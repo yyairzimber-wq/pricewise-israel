@@ -88,6 +88,58 @@ const DEFAULTS = {
   recentSearches: [],
 };
 
+/**
+ * localStorage that never throws: a full quota, private mode or blocked storage
+ * must not crash the app — it just stops remembering things.
+ */
+const safeStorage: Storage = {
+  get length() {
+    try {
+      return localStorage.length;
+    } catch {
+      return 0;
+    }
+  },
+  clear: () => {
+    try {
+      localStorage.clear();
+    } catch {
+      /* ignore */
+    }
+  },
+  key: (i) => {
+    try {
+      return localStorage.key(i);
+    } catch {
+      return null;
+    }
+  },
+  getItem: (k) => {
+    try {
+      return localStorage.getItem(k);
+    } catch {
+      return null;
+    }
+  },
+  setItem: (k, v) => {
+    try {
+      localStorage.setItem(k, v);
+    } catch {
+      /* quota exceeded / blocked */
+    }
+  },
+  removeItem: (k) => {
+    try {
+      localStorage.removeItem(k);
+    } catch {
+      /* ignore */
+    }
+  },
+};
+
+/** One basket line can't go past this (also the limit of a shared-list link). */
+export const MAX_QUANTITY = 99;
+
 export const useApp = create<AppState>()(
   persist(
     (set, get) => ({
@@ -112,13 +164,13 @@ export const useApp = create<AppState>()(
         set((s) => {
           const existing = s.basket.find((i) => i.product.id === product.id);
           if (existing) {
-            return { basket: s.basket.map((i) => (i.product.id === product.id ? { ...i, quantity: i.quantity + qty } : i)) };
+            return { basket: s.basket.map((i) => (i.product.id === product.id ? { ...i, quantity: Math.min(MAX_QUANTITY, i.quantity + qty) } : i)) };
           }
           return { basket: [...s.basket, { product, quantity: qty }] };
         }),
       setQuantity: (productId, qty) =>
         set((s) => ({
-          basket: qty <= 0 ? s.basket.filter((i) => i.product.id !== productId) : s.basket.map((i) => (i.product.id === productId ? { ...i, quantity: qty } : i)),
+          basket: qty <= 0 ? s.basket.filter((i) => i.product.id !== productId) : s.basket.map((i) => (i.product.id === productId ? { ...i, quantity: Math.min(MAX_QUANTITY, Math.floor(qty)) } : i)),
         })),
       removeFromBasket: (productId) => set((s) => ({ basket: s.basket.filter((i) => i.product.id !== productId) })),
       clearBasket: () => set({ basket: [] }),
@@ -175,7 +227,7 @@ export const useApp = create<AppState>()(
         return { ...current, ...p, data: { ...current.data, ...(p.data ?? {}) }, prefs: { ...current.prefs, ...(p.prefs ?? {}) } };
       },
       // localStorage today; swap for Capacitor Preferences in the native build.
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => safeStorage),
       partialize: (s) => ({
         theme: s.theme,
         prefs: s.prefs,
