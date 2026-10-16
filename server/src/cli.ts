@@ -8,7 +8,8 @@ import { recognitionConfigured } from "./recognize.ts";
 import { publishVercel } from "./publish.ts";
 import { exportStatic } from "./export.ts";
 import { exportImages, importImages, syncImagesFromDump } from "./imagesync.ts";
-import { dayNumber, loadPreviousHistory, previousSnapshotBase } from "./history.ts";
+import { dayNumber, emptyHistory, loadPreviousHistory, previousSnapshotBase } from "./history.ts";
+import { downloadLatestBackup, loadRestoreFile, mergeHistory, packHistory, repoSlug, RESTORE_FILE, statsOf, unpackHistory, uploadBackup } from "./historyBackup.ts";
 import fs from "node:fs";
 
 /**
@@ -18,6 +19,8 @@ import fs from "node:fs";
  *   node server/src/cli.ts refresh [--stores all] [--publish-vercel] [--force]   (one cycle, for a scheduler)
  *   node server/src/cli.ts publish-vercel [--dry-run]   (also: serve … --publish-vercel)
  *   node server/src/cli.ts export-static [--out site]
+ *   node server/src/cli.ts history-backup [--keep 8] [--out file] [--no-upload]   (price history → GitHub release)
+ *   node server/src/cli.ts history-restore [--from latest|file.json.gz]          (stage a backup for the next build)
  *   node server/src/cli.ts geocache-export|geocache-import
  *   node server/src/cli.ts status
  */
@@ -145,8 +148,15 @@ switch (cmd) {
     const out = flag("out") ?? "site";
     // Price history: carry over what the previous published snapshot recorded (see history.ts).
     const base = previousSnapshotBase();
-    const history = base ? await loadPreviousHistory(base, dayNumber(Date.now()), log) : undefined;
+    let history = base ? await loadPreviousHistory(base, dayNumber(Date.now()), log) : undefined;
     if (!base) console.log("  (אין כתובת לתמונת המצב הקודמת — ההיסטוריה מתחילה מחדש; הגדירו PRICEWISE_HISTORY_BASE כדי להמשיך אותה)");
+    // A backup staged with history-restore is merged in: it only ADDS what the live history lacks.
+    const restore = loadRestoreFile();
+    if (restore) {
+      const merged = mergeHistory(history ?? emptyHistory(dayNumber(Date.now())), restore);
+      history = merged.history;
+      console.log(`  שוחזר מגיבוי: נוספו ${merged.added.toLocaleString()} נקודות מחיר (${RESTORE_FILE})`);
+    }
     const r = exportStatic(db, out, log, { history });
     console.log(`✓ ${r.products} products · ${(r.bytes / 1e6).toFixed(1)}MB → ${out}/data`);
     break;
@@ -160,6 +170,42 @@ switch (cmd) {
   }
   case "images-export": {
     console.log(`✓ ${exportImages(db)} product photos → server/images.json`);
+    break;
+  }
+  case "history-backup": {
+    // Download the live history from the published site and store it as a GitHub release asset.
+    const [owner, name] = repoSlug().split("/");
+    const base = previousSnapshotBase() ?? `https://${owner}.github.io/${name}/data`;
+    const live = await loadPreviousHistory(base, dayNumber(Date.now()), log);
+    const stats = statsOf(live);
+    if (!stats.points) {
+      console.error("אין היסטוריה באתר המפורסם — אין מה לגבות (גיבוי ריק לא נשמר).");
+      process.exit(1);
+    }
+    const buf = packHistory(live);
+    const out = flag("out");
+    if (out) {
+      fs.writeFileSync(out, buf);
+      console.log(`  נשמר מקומית: ${out}`);
+    }
+    if (flag("no-upload") !== "true") {
+      const fileName = `history-${new Date().toISOString().slice(0, 10)}.json.gz`;
+      const r = await uploadBackup(buf, fileName, Number(flag("keep") ?? 8), stats, log);
+      if (r.pruned.length) console.log(`  נמחקו גיבויים ישנים: ${r.pruned.join(", ")}`);
+    }
+    console.log(`✓ גיבוי היסטוריה: ${stats.products.toLocaleString()} מוצרים · ${stats.points.toLocaleString()} נקודות מחיר · מאז ${live.since} · ${(buf.length / 1e6).toFixed(1)}MB`);
+    break;
+  }
+  case "history-restore": {
+    // Stage a backup: it is merged into the NEXT build (nothing in the live history is overwritten).
+    const from = flag("from") ?? "latest";
+    const source = from === "latest" ? await downloadLatestBackup() : { name: from, buf: fs.readFileSync(from) };
+    const backup = unpackHistory(source.buf); // validates the file
+    fs.writeFileSync(RESTORE_FILE, source.buf);
+    const st = statsOf(backup);
+    console.log(`✓ גיבוי מוכן לשחזור: ${source.name} · ${st.products.toLocaleString()} מוצרים · ${st.points.toLocaleString()} נקודות מחיר · מאז ${backup.since}`);
+    console.log(`  הצעד הבא: git add ${RESTORE_FILE} && git commit -m "restore price history" && git push, ואז להריץ את עדכון המחירים (Actions ← Refresh prices ← Run workflow).`);
+    console.log("  אחרי שהעדכון הסתיים אפשר למחוק את הקובץ (המיזוג בטוח גם אם הוא נשאר).");
     break;
   }
   case "geocache-export": {

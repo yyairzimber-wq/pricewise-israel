@@ -117,3 +117,10 @@ The Capacitor project is in `android/` (camera, location and RTL already configu
 4. Run `npm run build:native` then `npm run android`, and build or run from Android Studio.
 
 Publishing on Google Play needs a developer account (a one-time $25 fee). An iOS build needs a Mac with Xcode and an Apple Developer account ($99/year). Run `npm i @capacitor/ios && npx cap add ios` there.
+
+## גיבוי היסטוריית המחירים
+
+ההיסטוריה נשמרת רק באתר המפורסם (GitHub Pages), ולכן יש לה גיבוי נפרד:
+
+- **גיבוי:** `node server/src/cli.ts history-backup` מוריד את ההיסטוריה מהאתר ושומר קובץ אחד דחוס (~2MB) כקובץ בתוך ה-release בשם `history-backups` ב-GitHub. הקובץ נבדק (מורידים אותו חזרה ומשווים) לפני שגיבויים ישנים נמחקים; נשמרים 8 האחרונים. במחשב הזה רצה משימה שבועית (Windows Task Scheduler: "PriceWise History Backup", יום ראשון 09:30, יומן: `server/data/history-backup.log`).
+- **שחזור:** `node server/src/cli.ts history-restore` מכין את הגיבוי האחרון בקובץ `server/history-restore.json.gz`. אחרי commit ו-push, ההרצה הבאה של עדכון המחירים *ממזגת* אותו להיסטוריה החיה — הוא רק מוסיף ימים שחסרים, ולעולם לא דורס נתונים קיימים (אפשר להריץ שוב ושוב בלי נזק). אחרי שהעדכון הסתיים אפשר למחוק את הקובץ.
