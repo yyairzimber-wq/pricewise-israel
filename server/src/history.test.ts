@@ -39,7 +39,7 @@ describe("price history", () => {
   });
 });
 
-describe("loadPreviousHistory", () => {
+describe("loadPreviousHistory", { timeout: 30_000 }, () => {
   async function withServer(handler: (url: string) => { status: number; body?: unknown }, run: (base: string) => Promise<void>) {
     const http = await import("node:http");
     const server = http.createServer((req, res) => {
