@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { chainQuote, cleanManufacturer, guessCategory, parseSize, type StorePrice, type StorePromo } from "./aggregate.ts";
+import { chainQuote, cleanManufacturer, cleanText, guessCategory, parseSize, type StorePrice, type StorePromo } from "./aggregate.ts";
 import { CHAIN_NAMES, SOURCES } from "./config.ts";
 import type { DB } from "./db.ts";
 import { compactImage } from "../../src/core/services/offImage.ts";
@@ -181,12 +181,13 @@ export function exportStatic(db: DB, outDir: string, log: (m: string) => void, o
       pairs++;
     }
     if (!quotes.length) return;
+    const name = cleanText(meta.name);
     const brand = cleanManufacturer(meta.manufacturer) ?? 0;
-    const size = parseSize(meta.quantity, meta.unit_qty, meta.is_weighted === 1, meta.name);
-    const cat = CATEGORIES.indexOf(guessCategory(meta.name).category);
-    const productTuple = [meta.name, brand, cat, size ? size.amount : 0, size ? UNITS.indexOf(size.unit) : -1, images.get(barcode) ?? 0];
+    const size = parseSize(meta.quantity, meta.unit_qty, meta.is_weighted === 1, name);
+    const cat = CATEGORIES.indexOf(guessCategory(name).category);
+    const productTuple = [name, brand, cat, size ? size.amount : 0, size ? UNITS.indexOf(size.unit) : -1, images.get(barcode) ?? 0];
     shards[Number(barcode.slice(-3))][barcode] = [productTuple, quotes];
-    search.push([barcode, meta.name, brand, quotes.length, cat, size ? size.amount : 0, size ? UNITS.indexOf(size.unit) : -1]);
+    search.push([barcode, name, brand, quotes.length, cat, size ? size.amount : 0, size ? UNITS.indexOf(size.unit) : -1]);
     productCount++;
   };
 

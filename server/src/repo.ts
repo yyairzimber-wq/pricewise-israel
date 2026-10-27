@@ -26,7 +26,7 @@ export function searchProducts(db: DB, q: string, limit = 20): Product[] {
   const where = tokens.map(() => "(name LIKE ? OR manufacturer LIKE ?)").join(" AND ");
   const args = tokens.flatMap((t) => [`%${t}%`, `%${t}%`]);
   const rows = db
-    .prepare(`SELECT ${PRODUCT_COLS} FROM products WHERE ${where} ORDER BY chain_count DESC, (name LIKE ?) DESC, length(name) LIMIT ?`)
+    .prepare(`SELECT ${PRODUCT_COLS} FROM products WHERE ${where} ORDER BY (name LIKE ?) DESC, chain_count DESC, length(name) LIMIT ?`)
     .all(...args, `${tokens[0]}%`, Math.min(limit, 50)) as unknown as ProductRow[];
   const products = rows.map(toProduct);
   // Photos we already know about; look up the rest in the background for next time.

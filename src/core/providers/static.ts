@@ -1,6 +1,6 @@
 import { distanceKm } from "../services/geo";
 import { expandImage } from "../services/offImage";
-import { matchScore } from "../services/text";
+import { containsAll, normalizeFast, prepareQuery, scoreNormalized } from "../services/text";
 import type { Branch, CategoryId, DataSource, PriceHistory, PriceQuote, Product, SizeUnit } from "../types";
 import type { BranchProvider, BranchQuery, CatalogProvider, PriceProvider, PriceQuery } from "./types";
 
@@ -95,6 +95,16 @@ export class StaticSnapshot {
     }
     return p;
   }
+  private searchIndex = new Map<0 | 1, Promise<string[]>>();
+  /** Normalised "name brand" text per search row, built once (it is what every keystroke is matched against). */
+  getSearchIndex(part: 0 | 1): Promise<string[]> {
+    let p = this.searchIndex.get(part);
+    if (!p) {
+      p = this.getSearch(part).then((rows) => rows.map((r) => normalizeFast(`${r[1]} ${r[2] || ""}`)));
+      this.searchIndex.set(part, p);
+    }
+    return p;
+  }
   getSearch(part: 0 | 1) {
     if (part === 0) return (this.search0 ??= this.json<SearchTuple[]>("search-0.json"));
     return (this.search1 ??= this.json<SearchTuple[]>("search-1.json"));
@@ -182,14 +192,23 @@ export class StaticCatalogProvider implements CatalogProvider {
   }
   async search(query: string, limit = 20): Promise<Product[]> {
     const meta = await this.snap.getMeta();
-    const rank = (rows: SearchTuple[]) =>
-      rows
-        .map((r) => ({ r, s: matchScore(query, `${r[1]} ${r[2] || ""}`) }))
-        .filter((x) => x.s > 0)
-        .sort((a, b) => b.s - a.s || b.r[3] - a.r[3]);
+    const q = prepareQuery(query);
+    if (!q.length) return [];
+    const rank = async (part: 0 | 1) => {
+      const [rows, flat] = await Promise.all([this.snap.getSearch(part), this.snap.getSearchIndex(part)]);
+      const hits: { r: SearchTuple; s: number }[] = [];
+      for (let i = 0; i < rows.length; i++) {
+        if (!containsAll(q, flat[i])) continue; // the cheap check rejects almost every row
+        hits.push({ r: rows[i], s: scoreNormalized(q, flat[i]) });
+      }
+      return hits.sort((a, b) => b.s - a.s || b.r[3] - a.r[3]);
+    };
     // Products sold by several chains first; single-chain ones only if needed.
-    let hits = rank(await this.snap.getSearch(0));
-    if (hits.length < limit) hits = hits.concat(rank(await this.snap.getSearch(1)));
+    let hits = await rank(0);
+    // The single-chain list is large; start fetching it once the user has searched at all,
+    // so a rare query that needs it doesn't wait for the download.
+    if (hits.length >= limit) void this.snap.getSearchIndex(1).catch(() => undefined);
+    else hits = hits.concat(await rank(1));
     return hits.slice(0, limit).map(({ r }) => this.snap.toProduct(r[0], r[1], r[2], r[4], r[5], r[6], 0, meta));
   }
 }

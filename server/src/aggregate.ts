@@ -1,4 +1,5 @@
 import type { CategoryId, PriceQuote, Product, ProductSize } from "../../src/core/types.ts";
+import { guessCategory } from "./category.ts";
 
 /**
  * Pure functions that turn per-branch rows into the app's contract types.
@@ -146,29 +147,25 @@ export function parseSize(quantity: number | null, unitQty: string | null, weigh
   return undefined;
 }
 
-const CATEGORY_RULES: [RegExp, CategoryId, string][] = [
-  [/חיתול|מטרנה|סימילאק|תמ"ל|מגבונים לתינוק/, "baby", "👶"],
-  [/קורנפלקס|דגני בוקר|גרנולה|כריות/, "breakfast", "🥣"],
-  [/שוקולד|במבה|ביסלי|חטיף|עוגי|ופל|סוכרי|צ'יפס|קרקר|דובונים/, "snacks", "🍫"],
-  [/חלב|גבינ|יוגורט|קוטג|שמנת|חמאה|ביצים|מעדן|לבנה|שוקו/, "dairy", "🥛"],
-  [/לחם|פית|לחמני|חלה|באגט|טורטי/, "bakery", "🍞"],
-  [/קולה|מים |מים$|מיץ|משקה|בירה|יין|סודה|נקטר|ספרינג/, "drinks", "🥤"],
-  [/עוף|בקר|בשר|נקניק|שניצל עוף|הודו|כבד/, "meat", "🍗"],
-  [/קפוא|גלידה|מוקפא/, "frozen", "🧊"],
-  [/כביסה|אקונומיקה|נוזל כלים|מרכך|ניקוי|נייר טואלט|מגבות נייר|שקיות אשפה/, "cleaning", "🧺"],
-  [/שמפו|משחת שיניים|מברשת|דאודורנט|סבון|מרכך שיער|קרם/, "personal-care", "🧴"],
-  [/עגבני|מלפפון|בננ|תפוח|תפוז|בצל|גזר|תפו"א|אבוקדו|פלפל/, "produce", "🥬"],
-  [/קפה|תה |אורז|פסטה|ספגטי|קמח|סוכר|שמן|טונה|רוטב|קטשופ|טחינה|פתיתים|שימורי|קוסקוס|דבש|ריבה/, "pantry", "🥫"],
-];
 
-export function guessCategory(name: string): { category: CategoryId; emoji: string } {
-  for (const [re, category, emoji] of CATEGORY_RULES) if (re.test(name)) return { category, emoji };
-  return { category: "other", emoji: "🛒" };
+/**
+ * Product text from the chains' files often carries artefacts of whatever system
+ * produced it: LITERAL backslash sequences (a backslash followed by a quote or by
+ * "n"), stray backslashes, runs of spaces. Make it display- and search-ready.
+ */
+export function cleanText(text: string | null | undefined): string {
+  if (!text) return "";
+  return text
+    .replace(/\\[nrt]/g, " ") // a literal backslash-n / -r / -t
+    .replace(/\\(["'/.])/g, "$1") // an escaped quote, slash or dot
+    .replace(/\\/g, " ") // any backslash that's left
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /** Files use placeholders like "---", "לא ידוע" or "כללי" when the manufacturer is unknown. */
 export function cleanManufacturer(m: string | null | undefined): string | undefined {
-  const v = m?.trim();
+  const v = cleanText(m);
   if (!v || /^[-–—_.\s0]*$/.test(v) || /^(לא ידוע|כללי|אין|unknown)$/i.test(v)) return undefined;
   return v;
 }
@@ -178,7 +175,7 @@ export function toProduct(row: ProductRow): Product {
   return {
     id: `api:${row.barcode}`,
     barcode: row.barcode,
-    name: row.name,
+    name: cleanText(row.name),
     brand: cleanManufacturer(row.manufacturer),
     size: parseSize(row.quantity, row.unit_qty, row.is_weighted === 1, row.name),
     category,
@@ -186,3 +183,5 @@ export function toProduct(row: ProductRow): Product {
     source: { kind: "transparency-feed", label: "קובצי שקיפות מחירים של הרשתות" },
   };
 }
+
+export { guessCategory };

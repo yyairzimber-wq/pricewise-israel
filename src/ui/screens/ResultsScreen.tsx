@@ -70,10 +70,13 @@ export function ResultsScreen() {
       ? `${product.name} — הכי זול ב${c.chain.name}: ${formatILS(c.best!.price)}${isDemo ? " (נתוני הדגמה)" : ""}`
       : product.name;
     try {
-      if (navigator.share) await navigator.share({ title: "PriceWise ישראל", text });
+      // A link to this exact product, so whoever gets it can open the live prices.
+      const url = `${location.origin}${location.pathname}#/product/${encodeURIComponent(product.id)}`;
+      if (navigator.share) await navigator.share({ title: "PriceWise ישראל", text, url });
       else {
-        await navigator.clipboard.writeText(text);
-        toast("הועתק ללוח");
+        await navigator.clipboard.writeText(`${text}
+${url}`);
+        toast("הקישור הועתק — אפשר להדביק בוואטסאפ");
       }
     } catch {
       /* user cancelled */
